@@ -1,9 +1,0 @@
-[submodule "papr-copy"]
-	path = papr-copy
-	url = https://github.com/zvict/papr.git
-[submodule "PatchFusion-copy"]
-	path = PatchFusion-copy
-	url = https://github.com/zhyever/PatchFusion.git
-[submodule "scade-copy"]
-	path = scade-copy
-	url = https://github.com/mikacuy/scade.git
