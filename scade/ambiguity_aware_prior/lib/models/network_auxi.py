@@ -1075,4 +1075,3 @@ if __name__ == '__main__':
     inputs = torch.ones(4,3,128,128)
     out = net(inputs)
     print(out.size())
-
