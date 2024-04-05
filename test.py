@@ -228,6 +228,8 @@ def main(args, save_name, mode, resume_step=0):
     if args.test.load_path:
         try:
             model_state_dict = torch.load(args.test.load_path)
+            print("args.test.load_path")
+            print(model_state_dict)
             for step, state_dict in model_state_dict.items():
                 resume_step = int(step)
                 model.load_my_state_dict(state_dict)

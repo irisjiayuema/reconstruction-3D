@@ -274,8 +274,8 @@ eval:
   max_width: 100
   save_fig: true
 test:
-  # load_path: "checkpoints/chair.pth"
-  load_path: ""
+  load_path: "checkpoints/chair.pth"
+  #load_path: ""
   save_fig: true
   save_video: false
   max_height: 100

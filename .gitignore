@@ -3,6 +3,9 @@ data
 .vscode/
 data/
 experiments/
+checkpoints/
+datasets/
+*.zip
 *.pth
 *.pt
 *.out

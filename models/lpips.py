@@ -4,11 +4,16 @@ from torchvision import models as tv
 from collections import namedtuple
 import os
 
-
 class vgg16(nn.Module):
     def __init__(self, requires_grad=False, pretrained=True):
+        vgg16_path = 'checkpoints/vgg16-397923af.pth'
         super(vgg16, self).__init__()
-        vgg_pretrained_features = tv.vgg16(weights=tv.VGG16_Weights.IMAGENET1K_V1 if pretrained else None).features
+        if os.path.exists(vgg16_path):
+            model = tv.vgg16(pretrained=False)
+            model.load_state_dict(torch.load(vgg16_path))
+            vgg_pretrained_features = model.features
+        else:
+            vgg_pretrained_features = tv.vgg16(weights=tv.VGG16_Weights.IMAGENET1K_V1 if pretrained else None).features
         self.slice1 = nn.Sequential()
         self.slice2 = nn.Sequential()
         self.slice3 = nn.Sequential()
