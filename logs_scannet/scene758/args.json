@@ -1,5 +1,5 @@
 {
-    "opt": "",
+    "opt": "configs/nerfsyn/chair.yml",
     "resume": 250000,
     "task": "train",
     "expname": "scene758",

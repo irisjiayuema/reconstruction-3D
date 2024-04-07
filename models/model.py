@@ -17,84 +17,84 @@ class PAPR(nn.Module):
     def __init__(self, args, device='cuda'):
         super(PAPR, self).__init__()
         self.args = args
-        self.eps = args.eps
+        self.eps = args['eps']
         self.device = device
 
-        self.use_amp = args.use_amp
-        self.amp_dtype = torch.float16 if args.amp_dtype == 'float16' else torch.bfloat16
+        self.use_amp = args['use_amp']
+        self.amp_dtype = torch.float16 if args['amp_dtype'] == 'float16' else torch.bfloat16
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
-        point_opt = args.geoms.points
-        pc_feat_opt = args.geoms.point_feats
-        bkg_feat_opt = args.geoms.background
+        point_opt = args['geoms']['points']
+        pc_feat_opt = args['geoms']['point_feats']
+        bkg_feat_opt = args['geoms']['background']
 
         self.register_buffer('select_k', torch.tensor(
-            point_opt.select_k, device=device, dtype=torch.int32))
+            point_opt['select_k'], device=device, dtype=torch.int32))
 
-        self.coord_scale = args.dataset.coord_scale
+        self.coord_scale = args['dataset']['coord_scale']
 
-        if point_opt.load_path:
-            if point_opt.load_path.endswith('.pth') or point_opt.load_path.endswith('.pt'):
-                points = torch.load(point_opt.load_path, map_location='cpu')
+        if point_opt['load_path']:
+            if point_opt['load_path'].endswith('.pth') or point_opt['load_path'].endswith('.pt'):
+                points = torch.load(point_opt['load_path'], map_location='cpu')
                 points = np.asarray(points).astype(np.float32)
                 np.random.shuffle(points)
-                points = points[:args.max_num_pts, :]
+                points = points[:args['max_num_pts'], :]
                 points = torch.from_numpy(points).float()
-            print("Loaded points from {}, shape: {}, dtype {}".format(point_opt.load_path, points.shape, points.dtype))
+            print("Loaded points from {}, shape: {}, dtype {}".format(point_opt['load_path'], points.shape, points.dtype))
             print("Loaded points scale: ", points[:, 0].min(), points[:, 0].max(), points[:, 1].min(), points[:, 1].max(), points[:, 2].min(), points[:, 2].max())
         else:
             # Initialize point positions
-            pt_init_center = [i * self.coord_scale for i in point_opt.init_center]
-            pt_init_scale = [i * self.coord_scale for i in point_opt.init_scale]
-            if point_opt.init_type == 'sphere': # initial points on a sphere
-                points = self._sphere_pc(pt_init_center, point_opt.num, pt_init_scale)
-            elif point_opt.init_type == 'cube': # initial points in a cube
-                points = self._cube_normal_pc(pt_init_center, point_opt.num, pt_init_scale)
+            pt_init_center = [i * self.coord_scale for i in point_opt['init_center']]
+            pt_init_scale = [i * self.coord_scale for i in point_opt['init_scale']]
+            if point_opt['init_type'] == 'sphere': # initial points on a sphere
+                points = self._sphere_pc(pt_init_center, point_opt['num'], pt_init_scale)
+            elif point_opt['init_type'] == 'cube': # initial points in a cube
+                points = self._cube_normal_pc(pt_init_center, point_opt['num'], pt_init_scale)
             else:
-                raise NotImplementedError("Point init type [{:s}] is not found".format(point_opt.init_type))
+                raise NotImplementedError("Point init type [{:s}] is not found".format(point_opt['init_type']))
             print("Initialized points scale: ", points[:, 0].min(), points[:, 0].max(), points[:, 1].min(), points[:, 1].max(), points[:, 2].min(), points[:, 2].max())
         self.points = torch.nn.Parameter(points, requires_grad=True)
 
         # Initialize point influence scores
         self.points_influ_scores = torch.nn.Parameter(torch.ones(
-            points.shape[0], 1, device=device) * point_opt.influ_init_val, requires_grad=True)
+            points.shape[0], 1, device=device) * point_opt['influ_init_val'], requires_grad=True)
 
         # Initialize mapping MLP, only if fine-tuning with IMLE for the exposure control
         self.mapping_mlp = None
-        if args.models.mapping_mlp.use:
+        if args['models']['mapping_mlp']['use']:
             self.mapping_mlp = get_mapping_mlp(
-                args.models, use_amp=self.use_amp, amp_dtype=self.amp_dtype)
+                arg['models'], use_amp=self.use_amp, amp_dtype=self.amp_dtype)
 
         # Initialize UNet
-        if args.models.use_renderer:
-            tx_opt = args.models.transformer
-            feat_dim = tx_opt.embed.d_ff_out if tx_opt.embed.share_embed else tx_opt.embed.value.d_ff_out
-            self.renderer = get_generator(args.models.renderer.generator, in_c=feat_dim,
+        if args['models']['use_renderer']:
+            tx_opt = args['models']['transformer']
+            feat_dim = tx_opt['embed']['d_ff_out'] if tx_opt['embed']['share_embed'] else tx_opt['embed']['value']['d_ff_out']
+            self.renderer = get_generator(args['models']['renderer']['generator'], in_c=feat_dim,
                                           out_c=3, use_amp=self.use_amp, amp_dtype=self.amp_dtype)
             print("Number of parameters of renderer: ", count_parameters(self.renderer))
         else:
-            assert (args.models.transformer.embed.share_embed and args.models.transformer.embed.d_ff_out == 3) or \
-                (not args.models.transformer.embed.share_embed and args.models.transformer.embed.value.d_ff_out == 3), \
+            assert (args['models']['transformer']['embed']['share_embed'] and args['models']['transformer']['embed']['d_ff_out'] == 3) or \
+                (not args['models']['transformer']['embed']['share_embed'] and args['models']['transformer']['embed']['value']['d_ff_out'] == 3), \
                 "Value embedding MLP should have output dim 3 if not using renderer"
 
         # Initialize background score and features
-        if bkg_feat_opt.init_type == 'random':
+        if bkg_feat_opt['init_type'] == 'random':
             bkg_feat_init_func = torch.rand
-        elif bkg_feat_opt.init_type == 'zeros':
+        elif bkg_feat_opt['init_type'] == 'zeros':
             bkg_feat_init_func = torch.zeros
-        elif bkg_feat_opt.init_type == 'ones':
+        elif bkg_feat_opt['init_type'] == 'ones':
             bkg_feat_init_func = torch.ones
         else:
             raise NotImplementedError(
-                "Background init type [{:s}] is not found".format(bkg_feat_opt.init_type))
+                "Background init type [{:s}] is not found".format(bkg_feat_opt['init_type']))
         feat_dim = 3
-        self.bkg_feats = nn.Parameter(bkg_feat_init_func(bkg_feat_opt.seq_len, feat_dim, device=device) * bkg_feat_opt.init_scale, requires_grad=bkg_feat_opt.learnable)
-        self.bkg_score = torch.tensor(bkg_feat_opt.constant, device=device, dtype=torch.float32).reshape(1)
+        self.bkg_feats = nn.Parameter(bkg_feat_init_func(bkg_feat_opt['seq_len'], feat_dim, device=device) * bkg_feat_opt['init_scale'], requires_grad=bkg_feat_opt.learnable)
+        self.bkg_score = torch.tensor(bkg_feat_opt['constant'], device=device, dtype=torch.float32).reshape(1)
 
         # Initialize point features
-        self.use_pc_feats = pc_feat_opt.use_ink or pc_feat_opt.use_inq or pc_feat_opt.use_inv
+        self.use_pc_feats = pc_feat_opt['use_ink'] or pc_feat_opt['use_inq'] or pc_feat_opt['use_inv']
         if self.use_pc_feats:
-            self.pc_feats = nn.Parameter(torch.randn(points.shape[0], pc_feat_opt.dim), requires_grad=True)
+            self.pc_feats = nn.Parameter(torch.randn(points.shape[0], pc_feat_opt['dim']), requires_grad=True)
             print("Point features: ", self.pc_feats.shape, self.pc_feats.min(), self.pc_feats.max(), self.pc_feats.mean(), self.pc_feats.std())
 
         v_extra_dim = 0
@@ -110,10 +110,10 @@ class PAPR(nn.Module):
             q_extra_dim = self.pc_feats.shape[-1]
             print("Using q_extra_dim: ", q_extra_dim)
 
-        self.last_act = activation_func(args.models.last_act)
+        self.last_act = activation_func(args['models']['last_act'])
 
         # Initialize proximity attention layer(s)
-        transformer = get_transformer(args.models.transformer,
+        transformer = get_transformer(args['models']['transformer'],
                                       seq_len=point_opt.num,
                                       v_extra_dim=v_extra_dim,
                                       k_extra_dim=k_extra_dim,

@@ -3,6 +3,7 @@ import json
 import torch
 from torch.utils.tensorboard import SummaryWriter
 import os
+import yaml
 from models import get_model 
 from data.load_scene import load_scene_scannet
 from papr_helpers import compute_space_carving_loss_papr, get_papr_embedder # Adjust as necessary
@@ -185,7 +186,7 @@ def render(H, W, intrinsic, chunk=1024*32, rays=None, c2w=None, ndc=True,
     return ret_list + [ret_dict]
 
 
-def create_papr(args, scene_render_params):
+def create_papr(args, config, scene_render_params):
     """Instantiate PAPR's model based on the provided arguments."""
     ### DELETE ###
     print('3 - Create PAPR')
@@ -201,7 +202,7 @@ def create_papr(args, scene_render_params):
     output_ch = 5  # This may need to be adjusted for PAPR
 
     # Initialize the PAPR model with specified architecture parameters
-    model = get_model(args, device)
+    model = get_model(config, device)
 
     # Utilize DataParallel for multi-GPU support
     model = nn.DataParallel(model).to(args.device)
@@ -244,7 +245,7 @@ def create_papr(args, scene_render_params):
 
 
 # Define the training function
-def train_papr(images, depths, valid_depths, poses, intrinsics, i_split, args, scene_sample_params, lpips_alex, gt_depths, gt_valid_depths, all_depth_hypothesis, is_init_scales=False, scales_init=None, shifts_init=None):
+def train_papr(images, depths, valid_depths, poses, intrinsics, i_split, args, config, scene_sample_params, lpips_alex, gt_depths, gt_valid_depths, all_depth_hypothesis, is_init_scales=False, scales_init=None, shifts_init=None):
     """
     Train a Proximity Attention Point Rendering (PAPR) model.
     
@@ -321,7 +322,7 @@ def train_papr(images, depths, valid_depths, poses, intrinsics, i_split, args, s
 
     # Initialize the PAPR model and other training components
     # This function needs to be adapted or created for PAPR
-    render_kwargs_train, render_kwargs_test, start, papr_grad_vars, optimizer, papr_grad_names = create_papr(args, scene_sample_params)
+    render_kwargs_train, render_kwargs_test, start, papr_grad_vars, optimizer, papr_grad_names = create_papr(args, config, scene_sample_params)
     
     ################################ TRAIN ################################
     ##### Initialize depth scale and shift
@@ -525,11 +526,13 @@ def train_papr(images, depths, valid_depths, poses, intrinsics, i_split, args, s
 def run_papr():
     ### DELETE ###
     print('1 - run papr')
-    print(args.task)
 
     # Parse configuration and command-line arguments
     parser = config_parser()
     args = parser.parse_args()
+
+    with open(args.opt, 'r') as f:
+        config = yaml.safe_load(f)
 
     # Set up experiment name and save configuration arguments to a JSON file for reproducibility
     if args.task == "train":
@@ -577,7 +580,7 @@ def run_papr():
 
     # Execute training procedure
     if args.task == "train":
-        train_papr(images, depths, valid_depths, poses, intrinsics, i_split, args, scene_sample_params, lpips_alex, gt_depths, gt_valid_depths, all_depth_hypothesis)
+        train_papr(images, depths, valid_depths, poses, intrinsics, i_split, args, config, scene_sample_params, lpips_alex, gt_depths, gt_valid_depths, all_depth_hypothesis)
     exit()
 
     # For testing and video rendering, create a PAPR model with parameters set for inference (requires_grad = False)
