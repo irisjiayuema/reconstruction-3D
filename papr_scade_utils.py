@@ -1,6 +1,7 @@
 import argparse
 import numpy as np
 import torch
+import os
 
 #############################################
 # config_parser adapted from PAPR and SCADE #
@@ -41,7 +42,7 @@ def config_parser():
     parser.add_argument('--decay_rate', type=float, default=0.1, help='Decay rate for lr decay [default: 0.7]')
 
 
-    parser.add_argument("--chunk", type=int, default=1024*32, 
+    parser.add_argument("--chunk", type=int, default=156*156, 
                         help='number of rays processed in parallel, decrease if running out of memory')
     parser.add_argument("--netchunk_per_gpu", type=int, default=1024*64*4, 
                         help='number of pts sent through network in parallel, decrease if running out of memory')
@@ -127,7 +128,38 @@ def config_parser():
     ##################################
 
     return parser
+
+def load_checkpoint(args):
+    path = os.path.join(args.ckpt_dir, args.expname)
+    ckpts = [os.path.join(path, f) for f in sorted(os.listdir(path)) if '000.tar' in f]
+    print('Found ckpts', ckpts)
+    ckpt = None
+    if len(ckpts) > 0 and not args.no_reload:
+        ckpt_path = ckpts[-1]
+        print('Reloading from', ckpt_path)
+        ckpt = torch.load(ckpt_path)
+    return ckpt
 #######################################################################################################
+
+def dict_to_namespace(d):
+    """
+    Recursively converts a dictionary to an argparse.Namespace.
+    
+    Args:
+    - d (dict): The dictionary to convert.
+    
+    Returns:
+    - argparse.Namespace: The converted namespace.
+    """
+    namespace = argparse.Namespace()
+    for key, value in d.items():
+        if isinstance(value, dict):
+            # If the value is a dict, convert it to a namespace recursively
+            setattr(namespace, key, dict_to_namespace(value))
+        else:
+            # Otherwise, directly set the value
+            setattr(namespace, key, value)
+    return namespace
 
 
 ################################################ MODEL ################################################
@@ -139,6 +171,8 @@ img2mse = lambda x, y : torch.mean((x - y) ** 2)
 mse2psnr = lambda x : -10. * torch.log(x) / torch.log(torch.full((1,), 10., device=x.device))
 to8b = lambda x : (255*np.clip(x,0,1)).astype(np.uint8)
 to16b = lambda x : ((2**16 - 1) * np.clip(x,0,1)).astype(np.uint16)
+def compute_rmse(prediction, target):
+    return torch.sqrt((prediction - target).pow(2).mean())
 
 ################################################
 # From SCADE train_utils.hyperparameter_update #
@@ -182,6 +216,10 @@ def get_rays(H, W, intrinsic, c2w, coords=None):
     # Get ray origin
     # Translate camera frame's origin to the world frame. It is the origin of all rays.
     rays_o = c2w[:3,-1].expand(rays_d.shape)
+
+    # print('GET RAYS')
+    # print('RAYS D', rays_d.shape)
+    # print('RAYS O', rays_o.shape)
     
     return rays_o, rays_d
 
@@ -223,6 +261,34 @@ def perturb_z_vals(z_vals, pytest):
     z_vals = lower + (upper - lower) * t_rand
     return z_vals
 
-################################3
-# Rendering
+### MeanTracker from SCADE/train_utils/logging
+class MeanTracker(object):
+    def __init__(self):
+        self.reset()
 
+    def add(self, input, weight=1.):
+        for key, l in input.items():
+            if not key in self.mean_dict:
+                self.mean_dict[key] = 0
+            self.mean_dict[key] = (self.mean_dict[key] * self.total_weight + l) / (self.total_weight + weight)
+        self.total_weight += weight
+
+    def has(self, key):
+        return (key in self.mean_dict)
+
+    def get(self, key):
+        return self.mean_dict[key]
+    
+    def as_dict(self):
+        return self.mean_dict
+        
+    def reset(self):
+        self.mean_dict = dict()
+        self.total_weight = 0
+    
+    def print(self, f=None):
+        for key, l in self.mean_dict.items():
+            if f is not None:
+                print("{}: {}".format(key, l), file=f)
+            else:
+                print("{}: {}".format(key, l))

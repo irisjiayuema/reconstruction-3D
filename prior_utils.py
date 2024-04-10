@@ -1,6 +1,16 @@
+import torch
+import numpy as np
+from papr_scade_utils import get_rays
+
 ################################
 # From SCADE run_scade_scannet #
 ################################
+
+def select_coordinates(coords, N_rand):
+    coords = torch.reshape(coords, [-1,2])  # (H * W, 2)
+    select_inds = np.random.choice(coords.shape[0], size=[N_rand], replace=False)  # (N_rand,)
+    select_coords = coords[select_inds].long()  # (N_rand, 2)
+    return select_coords
 
 # Gets depth from prior
 def get_ray_batch_from_one_image_hypothesis_idx(H, W, img_i, images, depths, valid_depths, poses, intrinsics, all_hypothesis, args, space_carving_idx=None, cached_u=None):
@@ -17,12 +27,26 @@ def get_ray_batch_from_one_image_hypothesis_idx(H, W, img_i, images, depths, val
 
     rays_o, rays_d = get_rays(H, W, intrinsic, pose)  # (H, W, 3), (H, W, 3)
     select_coords = select_coordinates(coords, args.N_rand)
-    rays_o = rays_o[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
-    rays_d = rays_d[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
-    target_s = target[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
-    target_d = target_depth[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 1) or (N_rand, 2)
-    target_vd = target_valid_depth[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 1)
-    target_h = target_hypothesis[:, select_coords[:, 0], select_coords[:, 1]]
+
+    # print(rays_d.shape)
+    # print(rays_o.shape)
+
+    # rays_o = rays_o[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
+    # rays_d = rays_d[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
+    # target_s = target[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
+    # target_d = target_depth[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 1) or (N_rand, 2)
+    # target_vd = target_valid_depth[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 1)
+    # target_h = target_hypothesis[:, select_coords[:, 0], select_coords[:, 1]]
+
+    target_s = target
+    target_d = target_depth
+    target_vd = target_valid_depth
+    target_h = target_hypothesis
+    
+    # print(H, W)
+    # print(args.N_rand)
+    # print(rays_d[0].shape)
+    # print(rays_o.shape)
 
     if space_carving_idx is not None:
         # print(space_carving_idx.shape)

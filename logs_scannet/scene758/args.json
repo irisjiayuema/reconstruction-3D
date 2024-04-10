@@ -12,7 +12,7 @@
     "lrate": 0.0005,
     "decay_step": 400000,
     "decay_rate": 0.1,
-    "chunk": 32768,
+    "chunk": 24336,
     "netchunk_per_gpu": 262144,
     "no_reload": false,
     "N_samples": 64,
