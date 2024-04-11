@@ -9,24 +9,24 @@ import yaml
 import subprocess
 import torchvision
 import time
+import datetime
 from torch.utils.tensorboard import SummaryWriter
 from skimage.metrics import structural_similarity
 
 from models import get_model 
 from data import create_random_subsets, load_scene_scannet
-from papr_helpers import compute_space_carving_loss_papr #, get_papr_embedder # Adjust as necessary
-from papr_scade_utils import config_parser, dict_to_namespace, load_checkpoint, \
-    to8b, img2mse, mse2psnr, compute_rmse, get_learning_rate, get_rays, MeanTracker
 from prior_utils import get_ray_batch_from_one_image_hypothesis_idx
+from papr_helpers import compute_space_carving_loss_papr
+from papr_scade_utils import config_parser, dict_to_namespace, load_checkpoint, \
+    to8b, to16b,  img2mse, mse2psnr, compute_rmse, get_learning_rate, update_learning_rate, get_rays, MeanTracker
 from tqdm import tqdm, trange
-from lpips import LPIPS # Assuming you're using a perceptual loss; adjust as necessary
-
+from lpips import LPIPS 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 ### RENDERING ###
-def optimize_camera_embedding(image, pose, H, W, intrinsic, args, render_kwargs_test):
+def optimize_camera_embedding(image, pose, H, W, model, config, intrinsic, args, render_kwargs_test):
     render_kwargs_test["embedded_cam"] = torch.zeros(args.input_ch_cam, requires_grad=True).to(device)
     optimizer = torch.optim.Adam(params=(render_kwargs_test["embedded_cam"],), lr=5e-1)
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', factor=0.5, patience=3, verbose=True)
@@ -51,7 +51,7 @@ def optimize_camera_embedding(image, pose, H, W, intrinsic, args, render_kwargs_
             curr_rays_d = rays_d[curr_coords[:, 0], curr_coords[:, 1]]  # (N_rand, 3)
             target_s = image[curr_coords[:, 0], curr_coords[:, 1]]
             batch_rays = torch.stack([curr_rays_o, curr_rays_d], 0)
-            rgb, _, _, _ = render(H, half_W, None, chunk=args.chunk, rays=batch_rays, verbose=i < 10, **render_kwargs_test)
+            rgb, _, _, _ = render(H, half_W, None, model, config, chunk=args.chunk, rays=batch_rays, verbose=i < 10, **render_kwargs_test)
             img_loss = img2mse(rgb, target_s)
             img_loss.backward()
             sum_img_loss += img_loss
@@ -64,7 +64,7 @@ def optimize_camera_embedding(image, pose, H, W, intrinsic, args, render_kwargs_
             print("Step {}: PSNR: {} ({:.2f}min)".format(i, psnr, (time.time() - start_time) / 60))
     render_kwargs_test["embedded_cam"] = best_embedded_cam
 
-def render_images_with_metrics(count, indices, images, depths, valid_depths, poses, H, W, intrinsics, lpips_alex, args, render_kwargs_test, \
+def render_images_with_metrics(model, count, indices, images, depths, valid_depths, poses, H, W, intrinsics, lpips_alex, args, config, render_kwargs_test, \
     embedcam_fn=None, with_test_time_optimization=False):
     far = render_kwargs_test['far']
 
@@ -105,7 +105,7 @@ def render_images_with_metrics(count, indices, images, depths, valid_depths, pos
                 render_kwargs_test["embedded_cam"] = embedcam_fn[img_idx]
         
         with torch.no_grad():
-            rgb, depth = render(H, W, intrinsic, chunk=(args.chunk // 2), c2w=pose, **render_kwargs_test)
+            rgb, depth = render(H, W, intrinsic, model, config, chunk=(args.chunk // 2), c2w=pose, **render_kwargs_test)
             
             # compute depth rmse
             depth_rmse = compute_rmse(depth[target_valid_depth], target_depth[:, :, 0][target_valid_depth])
@@ -147,7 +147,22 @@ def render_images_with_metrics(count, indices, images, depths, valid_depths, pos
     all_mean_metrics.add({**mean_metrics.as_dict(), **mean_depth_metrics.as_dict()})
     return all_mean_metrics, res
 
-def render_video(poses, H, W, intrinsics, filename, args, render_kwargs_test, fps=25):
+def write_images_with_metrics(images, mean_metrics, far, args, with_test_time_optimization=False):
+    result_dir = os.path.join(args.ckpt_dir, args.expname, "test_images_" + ("with_optimization_" if with_test_time_optimization else "") + args.scene_id)
+    os.makedirs(result_dir, exist_ok=True)
+    for n, (rgb, depth) in enumerate(zip(images["rgbs"].permute(0, 2, 3, 1).cpu().numpy(), \
+            images["depths"].permute(0, 2, 3, 1).cpu().numpy())):
+
+        # write rgb
+        cv2.imwrite(os.path.join(result_dir, str(n) + "_rgb" + ".jpg"), cv2.cvtColor(to8b(rgb), cv2.COLOR_RGB2BGR))
+        # write depth
+        cv2.imwrite(os.path.join(result_dir, str(n) + "_d" + ".png"), to16b(depth))
+
+    with open(os.path.join(result_dir, 'metrics.txt'), 'w') as f:
+        mean_metrics.print(f)
+    mean_metrics.print()
+
+def render_video(poses, H, W, model, config, intrinsics, filename, args, render_kwargs_test, fps=25):
     video_dir = os.path.join(args.ckpt_dir, args.expname, 'video_' + filename)
     if os.path.exists(video_dir):
         shutil.rmtree(video_dir)
@@ -162,7 +177,7 @@ def render_video(poses, H, W, intrinsics, filename, args, render_kwargs_test, fp
             if args.input_ch_cam > 0:
                 render_kwargs_test["embedded_cam"] = torch.zeros((args.input_ch_cam), device=device)
             # render video in 16:9 with one third rgb, one third depth and one third depth standard deviation
-            rgb, depth = render(H, W, intrinsic, chunk=(args.chunk // 2), c2w=pose, with_5_9=True, **render_kwargs_test)
+            rgb, depth = render(H, W, intrinsic, model, config, chunk=(args.chunk // 2), c2w=pose, with_5_9=True, **render_kwargs_test)
             rgb_cpu_numpy_8b = to8b(rgb.cpu().numpy())
             video_frame = cv2.cvtColor(rgb_cpu_numpy_8b, cv2.COLOR_RGB2BGR)
             max_depth_in_video = max(max_depth_in_video, depth.max())
@@ -581,6 +596,7 @@ def train_papr(images, depths, valid_depths, poses, intrinsics, i_split, args, c
     ##############
     # TRAIN LOOP #
     ##############
+    # N_iters = 2
     for i in trange(start, N_iters):
 
         ### Scale the hypotheses by scale and shift
@@ -669,16 +685,16 @@ def train_papr(images, depths, valid_depths, poses, intrinsics, i_split, args, c
         
         if i%args.i_img==0:
             # visualize 2 train images
-            _, images_train = render_images_with_metrics(2, i_train, images, depths, valid_depths, \
-                poses, H, W, intrinsics, lpips_alex, args, render_kwargs_test, embedcam_fn=embedcam_fn)
+            _, images_train = render_images_with_metrics(model, 2, i_train, images, depths, valid_depths, \
+                poses, H, W, intrinsics, lpips_alex, args, config, render_kwargs_test, embedcam_fn=embedcam_fn)
             tb.add_image('train_image',  torch.cat((
                 torchvision.utils.make_grid(images_train["rgbs"], nrow=1), \
                 torchvision.utils.make_grid(images_train["target_rgbs"], nrow=1), \
                 torchvision.utils.make_grid(images_train["depths"], nrow=1), \
                 torchvision.utils.make_grid(images_train["target_depths"], nrow=1)), 2), i)
             # compute validation metrics and visualize 8 validation images
-            mean_metrics_val, images_val = render_images_with_metrics(8, i_val, images, depths, valid_depths, \
-                poses, H, W, intrinsics, lpips_alex, args, render_kwargs_test)
+            mean_metrics_val, images_val = render_images_with_metrics(model, 8, i_val, images, depths, valid_depths, \
+                poses, H, W, intrinsics, lpips_alex, args, config, render_kwargs_test)
             tb.add_scalars('mse', {'val': mean_metrics_val.get("img_loss")}, i)
             tb.add_scalars('psnr', {'val': mean_metrics_val.get("psnr")}, i)
             tb.add_scalar('ssim', mean_metrics_val.get("ssim"), i)
@@ -711,8 +727,8 @@ def train_papr(images, depths, valid_depths, poses, intrinsics, i_split, args, c
             valid_depths = torch.Tensor(test_valid_depths).bool().to(device)
             poses = torch.Tensor(test_poses).to(device)
             intrinsics = torch.Tensor(test_intrinsics).to(device)
-            mean_metrics_test, images_test = render_images_with_metrics(None, i_test, images, depths, valid_depths, \
-                poses, H, W, intrinsics, lpips_alex, args, render_kwargs_test)
+            mean_metrics_test, images_test = render_images_with_metrics(model, None, i_test, images, depths, valid_depths, \
+                poses, H, W, intrinsics, lpips_alex, args, config, render_kwargs_test)
             write_images_with_metrics(images_test, mean_metrics_test, far, args)
             tb.flush()
 
