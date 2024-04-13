@@ -40,7 +40,7 @@ from zoedepth.models.zoedepth import ZoeDepth
 
 import matplotlib.pyplot as plt
 from estimator.models.utils import get_activation, generatemask, RunningAverageMap
-from zoedepth.models.base_models.midas import Resize as ResizeZoe
+from zoedepth.models.base_models.midas1 import Resize as ResizeZoe
 from depth_anything.transform import Resize as ResizeDA
 
 @MODELS.register_module()
@@ -139,14 +139,15 @@ class BaselinePretrain(nn.Module):
             raise NotImplementedError('Not support training coarse and fine together')
         return model_state_dict
     
-    def infer_forward(self, imgs_crop):
-        output_dict = self.fine_branch(imgs_crop)
+    def infer_forward(self, imgs_crop, z):
+        output_dict = self.fine_branch(imgs_crop, z)
         return output_dict['metric_depth']
     
     @torch.no_grad()
     def random_tile(
-        self, 
+        self,
         image_hr, 
+        z,
         tile_temp=None, 
         blur_mask=None, 
         avg_depth_map=None,
@@ -197,9 +198,9 @@ class BaselinePretrain(nn.Module):
                     coarse_temp_dict[k] = v
             bbox_feat_forward = bboxs_feat
             bbox_feat_forward[:, 0] = 0
-            prediction = self.infer_forward(imgs_crop, bbox_feat_forward, tile_temp, coarse_temp_dict)
+            prediction = self.infer_forward(imgs_crop, z, bbox_feat_forward, tile_temp, coarse_temp_dict)
         else:
-            prediction = self.infer_forward(imgs_crop)
+            prediction = self.infer_forward(imgs_crop,z)
             
         prediction_list.append(prediction)
         predictions = torch.cat(prediction_list, dim=0)
@@ -224,6 +225,7 @@ class BaselinePretrain(nn.Module):
     @torch.no_grad()
     def regular_tile(
         self, 
+        z_fine,
         offset, 
         offset_process, 
         image_hr, 
@@ -304,9 +306,13 @@ class BaselinePretrain(nn.Module):
                         coarse_temp_dict[k] = v[idx*process_num:(idx+1)*process_num, :, :, :]
                 bbox_feat_forward = bboxs_feat[idx*process_num:(idx+1)*process_num, :]
                 bbox_feat_forward[:, 0] = 0
-                prediction = self.infer_forward(rebatch_image, bbox_feat_forward, tile_temp, coarse_temp_dict)
+                #print("HERE")
+                prediction = self.infer_forward(rebatch_image, z_fine, bbox_feat_forward, tile_temp, coarse_temp_dict)
+                #print("WORKED")
             else:
-                prediction = self.infer_forward(rebatch_image)
+                #print("HERE1")
+                prediction = self.infer_forward(rebatch_image, z_fine)
+                #print("WORKED1")
             prediction_list.append(prediction)
         predictions = torch.cat(prediction_list, dim=0)
                          
@@ -335,6 +341,7 @@ class BaselinePretrain(nn.Module):
     
     def forward(
         self,
+        z_fine,
         mode,
         image_lr,
         image_hr,
@@ -380,6 +387,7 @@ class BaselinePretrain(nn.Module):
                 blur_mask = generatemask((self.patch_process_shape[0], self.patch_process_shape[1])) + 1e-3
                 blur_mask = torch.tensor(blur_mask, device=image_hr.device)
                 avg_depth_map = self.regular_tile(
+                    z_fine=z_fine,
                     offset=[0, 0], 
                     offset_process=[0, 0], 
                     image_hr=image_hr[0], 
@@ -391,14 +399,17 @@ class BaselinePretrain(nn.Module):
 
                 if cai_mode == 'm2' or cai_mode[0] == 'r':
                     avg_depth_map = self.regular_tile(
+                        z_fine = z_fine,
                         offset=[0, tile_cfg['patch_raw_shape'][1]//2], 
                         offset_process=[0, self.patch_process_shape[1]//2], 
                         image_hr=image_hr[0], init_flag=False, tile_temp=None, blur_mask=blur_mask, avg_depth_map=avg_depth_map, tile_cfg=tile_cfg, process_num=process_num)
                     avg_depth_map = self.regular_tile(
+                        z_fine=z_fine,
                         offset=[tile_cfg['patch_raw_shape'][0]//2, 0],
                         offset_process=[self.patch_process_shape[0]//2, 0], 
                         image_hr=image_hr[0], init_flag=False, tile_temp=None, blur_mask=blur_mask, avg_depth_map=avg_depth_map, tile_cfg=tile_cfg, process_num=process_num)
                     avg_depth_map = self.regular_tile(
+                        z_fine=z_fine,
                         offset=[tile_cfg['patch_raw_shape'][0]//2, tile_cfg['patch_raw_shape'][1]//2],
                         offset_process=[self.patch_process_shape[0]//2, self.patch_process_shape[1]//2], 
                         init_flag=False, image_hr=image_hr[0], tile_temp=None, blur_mask=blur_mask, avg_depth_map=avg_depth_map, tile_cfg=tile_cfg, process_num=process_num)
@@ -410,7 +421,7 @@ class BaselinePretrain(nn.Module):
                     patch_num = int(cai_mode[1:])
                     for i in range(patch_num):
                         avg_depth_map = self.random_tile(
-                            image_hr=image_hr[0], tile_temp=None, blur_mask=blur_mask, avg_depth_map=avg_depth_map, tile_cfg=tile_cfg, process_num=process_num)
+                            image_hr=image_hr[0], z=z_fine, tile_temp=None, blur_mask=blur_mask, avg_depth_map=avg_depth_map, tile_cfg=tile_cfg, process_num=process_num)
                 
                 depth = avg_depth_map.average_map
                 depth = depth.unsqueeze(dim=0).unsqueeze(dim=0)

@@ -116,3 +116,5 @@ nfs
 nfs_fixbug
 data
 work_dir
+
+midas_model_state_dict.pt

@@ -45,8 +45,9 @@ def load_state_dict(model, state_dict):
             k = 'module.' + k
 
         state[k] = v
-
-    model.load_state_dict(state)
+    print(type(model)) #<class 'zoedepth.models.zoedepth.zoedepth_v1.ZoeDepth'>
+    #print(state.keys()) # All the layers names
+    model.load_state_dict(state, strict = False)
     print("Loaded successfully")
     return model
 

@@ -47,7 +47,7 @@ from zoedepth.models.zoedepth import ZoeDepth
 from zoedepth.models.layers.attractor import AttractorLayer, AttractorLayerUnnormed
 from zoedepth.models.layers.dist_layers import ConditionalLogBinomial
 from zoedepth.models.layers.localbins_layers import (Projector, SeedBinRegressor, SeedBinRegressorUnnormed)
-from zoedepth.models.base_models.midas import Resize as ResizeZoe
+from zoedepth.models.base_models.midas1 import Resize as ResizeZoe
 from depth_anything.transform import Resize as ResizeDA
 
 
@@ -181,14 +181,17 @@ class PatchFusion(BaselinePretrain, PyTorchModelHubMixin):
                 save_state_dict[k] = v
         return save_state_dict
     
-    def coarse_forward(self, image_lr):
+    def coarse_forward(self, image_lr, z):
         with torch.no_grad():
             if self.coarse_branch.training:
                 self.coarse_branch.eval()
-                    
-            deep_model_output_dict = self.coarse_branch(image_lr, return_final_centers=True)
+
+            
+            deep_model_output_dict = self.coarse_branch(image_lr, z, return_final_centers=True)
+            #print("Coarse Model Worked !!")
             deep_features = deep_model_output_dict['temp_features'] # x_d0 1/128, x_blocks_feat_0 1/64, x_blocks_feat_1 1/32, x_blocks_feat_2 1/16, x_blocks_feat_3 1/8, midas_final_feat 1/4 [based on 384x4, 512x4]
             coarse_prediction = deep_model_output_dict['metric_depth']
+            
             
             coarse_features = [
                 deep_features['x_d0'],
@@ -200,12 +203,15 @@ class PatchFusion(BaselinePretrain, PyTorchModelHubMixin):
 
             return coarse_prediction, coarse_features
     
-    def fine_forward(self, image_hr_crop):
+    def fine_forward(self, image_hr_crop, z):
         with torch.no_grad():
             if self.fine_branch.training:
                 self.fine_branch.eval()
+
             
-            deep_model_output_dict = self.fine_branch(image_hr_crop, return_final_centers=True)
+      
+            deep_model_output_dict = self.fine_branch(image_hr_crop, z, return_final_centers=True)
+            #print("Fine Model Worked !!")
             deep_features = deep_model_output_dict['temp_features'] # x_d0 1/128, x_blocks_feat_0 1/64, x_blocks_feat_1 1/32, x_blocks_feat_2 1/16, x_blocks_feat_3 1/8, midas_final_feat 1/4 [based on 384x4, 512x4]
             fine_prediction = deep_model_output_dict['metric_depth']
             
@@ -335,9 +341,9 @@ class PatchFusion(BaselinePretrain, PyTorchModelHubMixin):
         return out, proj_feat_list
     
     
-    def infer_forward(self, imgs_crop, bbox_feat_forward, tile_temp, coarse_temp_dict):
+    def infer_forward(self, imgs_crop, z, bbox_feat_forward, tile_temp, coarse_temp_dict):
         
-        fine_prediction, fine_features = self.fine_forward(imgs_crop)
+        fine_prediction, fine_features = self.fine_forward(imgs_crop, z)
         
         depth_prediction, consistency_target = \
             self.fusion_forward(
@@ -353,6 +359,8 @@ class PatchFusion(BaselinePretrain, PyTorchModelHubMixin):
     
     def forward(
         self,
+        z_coarse,
+        z_fine,
         mode,
         image_lr,
         image_hr,
@@ -373,9 +381,10 @@ class PatchFusion(BaselinePretrain, PyTorchModelHubMixin):
             bboxs_feat = bboxs * bboxs_feat_factor
             inds = torch.arange(bboxs.shape[0]).to(bboxs.device).unsqueeze(dim=-1)
             bboxs_feat = torch.cat((inds, bboxs_feat), dim=-1)
-        
-            coarse_prediction, coarse_features = self.coarse_forward(image_lr)
-            fine_prediction, fine_features = self.fine_forward(crops_image_hr)
+            #z_coarse = torch.randn((image_lr.shape[0], 512), device='cuda:0')
+            #z_fine = torch.randn((image_lr.shape[0], 512), device='cuda:0')
+            coarse_prediction, coarse_features = self.coarse_forward(image_lr, z=z_coarse)
+            fine_prediction, fine_features = self.fine_forward(crops_image_hr, z=z_fine)
             coarse_prediction_roi, coarse_features_patch_area = self.coarse_postprocess_train(coarse_prediction, coarse_features, bboxs, bboxs_feat)
 
             depth_prediction, consistency_target = self.fusion_forward(
@@ -400,16 +409,19 @@ class PatchFusion(BaselinePretrain, PyTorchModelHubMixin):
                 tile_cfg = self.prepare_tile_cfg(tile_cfg['image_raw_shape'], tile_cfg['patch_split_num'])
             
             assert image_hr.shape[0] == 1
-            
-            coarse_prediction, coarse_features = self.coarse_forward(image_lr)
+            z_coarse = torch.randn((image_lr.shape[0], 512), device='cuda:0') * 5.0
+            coarse_prediction, coarse_features = self.coarse_forward(image_lr, z=z_coarse)
             
             tile_temp = {
                 'coarse_prediction': coarse_prediction,
                 'coarse_features': coarse_features,}
             
+            z_fine = torch.randn((image_lr.shape[0], 512), device='cuda:0') * 5.0
+            
             blur_mask = generatemask((self.patch_process_shape[0], self.patch_process_shape[1])) + 1e-3
             blur_mask = torch.tensor(blur_mask, device=image_hr.device)
             avg_depth_map = self.regular_tile(
+                z_fine=z_fine,
                 offset=[0, 0], 
                 offset_process=[0, 0], 
                 image_hr=image_hr[0], 
@@ -418,17 +430,17 @@ class PatchFusion(BaselinePretrain, PyTorchModelHubMixin):
                 blur_mask=blur_mask,
                 tile_cfg=tile_cfg,
                 process_num=process_num)
-
+            
             if cai_mode == 'm2' or cai_mode[0] == 'r':
-                avg_depth_map = self.regular_tile(
+                avg_depth_map = self.regular_tile(z_fine,
                     offset=[0, tile_cfg['patch_raw_shape'][1]//2], 
                     offset_process=[0, self.patch_process_shape[1]//2], 
                     image_hr=image_hr[0], init_flag=False, tile_temp=tile_temp, blur_mask=blur_mask, avg_depth_map=avg_depth_map, tile_cfg=tile_cfg, process_num=process_num)
-                avg_depth_map = self.regular_tile(
+                avg_depth_map = self.regular_tile(z_fine,
                     offset=[tile_cfg['patch_raw_shape'][0]//2, 0],
                     offset_process=[self.patch_process_shape[0]//2, 0], 
                     image_hr=image_hr[0], init_flag=False, tile_temp=tile_temp, blur_mask=blur_mask, avg_depth_map=avg_depth_map, tile_cfg=tile_cfg, process_num=process_num)
-                avg_depth_map = self.regular_tile(
+                avg_depth_map = self.regular_tile(z_fine,
                     offset=[tile_cfg['patch_raw_shape'][0]//2, tile_cfg['patch_raw_shape'][1]//2],
                     offset_process=[self.patch_process_shape[0]//2, self.patch_process_shape[1]//2], 
                     init_flag=False, image_hr=image_hr[0], tile_temp=tile_temp, blur_mask=blur_mask, avg_depth_map=avg_depth_map, tile_cfg=tile_cfg, process_num=process_num)
@@ -440,7 +452,7 @@ class PatchFusion(BaselinePretrain, PyTorchModelHubMixin):
                 patch_num = int(cai_mode[1:]) // process_num
                 for i in range(patch_num):
                     avg_depth_map = self.random_tile(
-                        image_hr=image_hr[0], tile_temp=tile_temp, blur_mask=blur_mask, avg_depth_map=avg_depth_map, tile_cfg=tile_cfg, process_num=process_num)
+                        image_hr=image_hr[0], z=z_fine,tile_temp=tile_temp, blur_mask=blur_mask, avg_depth_map=avg_depth_map, tile_cfg=tile_cfg, process_num=process_num)
 
             depth = avg_depth_map.average_map
             depth = depth.unsqueeze(dim=0).unsqueeze(dim=0)

@@ -27,7 +27,7 @@ import itertools
 import torch
 import torch.nn as nn
 from zoedepth.models.depth_model import DepthModel
-from zoedepth.models.base_models.midas import MidasCore
+from zoedepth.models.base_models.midas1 import MidasCore
 from zoedepth.models.base_models.depth_anything import DepthAnythingCore
 from zoedepth.models.layers.attractor import AttractorLayer, AttractorLayerUnnormed
 from zoedepth.models.layers.dist_layers import ConditionalLogBinomial
@@ -122,7 +122,7 @@ class ZoeDepth(DepthModel):
         self.conditional_log_binomial = ConditionalLogBinomial(
             last_in, bin_embedding_dim, n_classes=n_bins, min_temp=min_temp, max_temp=max_temp)
         
-    def forward(self, x, return_final_centers=False, denorm=False, return_probs=False, hack_feature=None, only_encoder=False, **kwargs):
+    def forward(self, x, z, return_final_centers=False, denorm=False, return_probs=False, hack_feature=None, only_encoder=False, **kwargs):
         """
         Args:
             x (torch.Tensor): Input image tensor of shape (B, C, H, W)
@@ -142,10 +142,12 @@ class ZoeDepth(DepthModel):
         
         if hack_feature is None:
             b, c, h, w = x.shape
+            
+            # print("Zoe_Depth_Z")
             # print("input shape ", x.shape)
             self.orig_input_width = w
             self.orig_input_height = h
-            rel_depth, out = self.core(x, denorm=denorm, return_rel_depth=True)
+            rel_depth, out = self.core(x, z, denorm=denorm, return_rel_depth=True)
             
             outconv_activation = out[0]
             btlnck = out[1]

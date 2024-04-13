@@ -16,7 +16,7 @@ from estimator.datasets.transformers import aug_color, aug_flip, to_tensor, rand
 from estimator.datasets.u4k_dataset import UnrealStereo4kDataset
 from estimator.datasets.utils import readPFM
 
-from zoedepth.models.base_models.midas import Resize
+from zoedepth.models.base_models.midas1 import Resize
 from depth_anything.transform import Resize as ResizeDA
 
 def read_image(path, dataset_name, image_resolution=(2160, 3840)):

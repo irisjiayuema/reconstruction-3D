@@ -57,7 +57,15 @@ class Tester:
         for idx, (batch_indices, batch_data) in enumerate(zip(loader_indices, self.dataloader)):
             
             batch_data_collect = self.collect_input(batch_data)
-            result, log_dict = self.model(mode='infer', cai_mode=cai_mode, process_num=process_num, **batch_data_collect) # might use test/val to split cases
+            B = batch_data_collect['image_lr'].shape[0]
+            #print(B)
+            z_coarse = torch.randn((B, 512), device='cuda:0')
+            z_fine = torch.randn((B, 512), device='cuda:0')
+            
+            # for name, param in self.model.named_parameters():
+            #     print(name)
+            # exit()
+            result, log_dict = self.model(mode='infer', z_coarse=z_coarse, z_fine=z_fine, cai_mode=cai_mode, process_num=process_num, **batch_data_collect) # might use test/val to split cases
             
             if self.runner_info.save:
                 

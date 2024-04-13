@@ -34,7 +34,7 @@ def parse_args():
         help='log_name for wandb')
     parser.add_argument(
         '--tags',
-        type=str, default='',
+        type=str, default='idk',
         help='tags for wandb')
     parser.add_argument(
         '--amp',
@@ -63,10 +63,10 @@ def parse_args():
     # When using PyTorch version >= 2.0.0, the `torch.distributed.launch`
     # will pass the `--local-rank` parameter to `tools/train.py` instead
     # of `--local_rank`.
-    parser.add_argument('--local_rank', '--local-rank', type=int, default=0)
+    #parser.add_argument('--local_rank', '--local-rank', type=int, default=0)
     args = parser.parse_args()
-    if 'LOCAL_RANK' not in os.environ:
-        os.environ['LOCAL_RANK'] = str(args.local_rank)
+    # if 'LOCAL_RANK' not in os.environ:
+    #     os.environ['LOCAL_RANK'] = str(args.local_rank)
 
     return args
 
@@ -142,7 +142,7 @@ def main():
             tags=cfg.tags, 
             dir=runner_info.work_dir,
             config=cfg, # have a test
-            settings=wandb.Settings(start_method="fork"))
+            settings=wandb.Settings(start_method="spawn"))
         
         wandb.define_metric("Val/step")
         wandb.define_metric("Val/*", step_metric="Val/step")

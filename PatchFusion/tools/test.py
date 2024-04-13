@@ -8,7 +8,8 @@ from mmengine.utils import mkdir_or_exist
 from mmengine.config import Config, DictAction
 from mmengine.logging import MMLogger
 
-from estimator.utils import RunnerInfo, setup_env, log_env, fix_random_seed
+from estimator.utils import RunnerInfo, setup_env, log_env
+#fix_random_seed
 from estimator.models.builder import build_model
 from estimator.datasets.builder import build_dataset
 from estimator.tester import Tester
@@ -110,8 +111,8 @@ def main():
     cfg.ckp_path = args.ckp_path
     
     # fix seed
-    seed = cfg.get('seed', 5621)
-    fix_random_seed(seed)
+    # seed = cfg.get('seed', 5621)
+    # fix_random_seed(seed)
     
     # start dist training
     if cfg.launcher == 'none':
@@ -173,7 +174,7 @@ def main():
     runner_info.rank = rank
     runner_info.distributed = distributed
     runner_info.launcher = cfg.launcher
-    runner_info.seed = seed
+    #runner_info.seed = seed
     runner_info.world_size = world_size
     runner_info.work_dir = cfg.work_dir
     runner_info.timestamp = timestamp
@@ -193,7 +194,7 @@ def main():
         if hasattr(model, 'load_dict'):
             print_log(model.load_dict(torch.load(cfg.ckp_path)['model_state_dict']), logger='current')
         else:
-            print_log(model.load_state_dict(torch.load(cfg.ckp_path)['model_state_dict'], strict=True), logger='current')
+            print_log(model.load_state_dict(torch.load(cfg.ckp_path)['model_state_dict'], strict=False), logger='current')
     else:
         print_log('Checkpoint Path: {}. Loading from the huggingface repo'.format(cfg.ckp_path), logger='current')
         assert cfg.ckp_path in \

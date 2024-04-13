@@ -5,7 +5,7 @@ import numpy as np
 from torch.utils.data import Dataset
 import torch.nn as nn
 from torchvision import transforms
-from zoedepth.models.base_models.midas import Resize
+from zoedepth.models.base_models.midas1 import Resize
 from depth_anything.transform import Resize as ResizeDA
 import os.path as osp
 from collections import OrderedDict

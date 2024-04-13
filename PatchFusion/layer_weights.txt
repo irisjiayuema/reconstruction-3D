@@ -1,0 +1,4 @@
+04/08 16:13:22 - patchstitcher - INFO - Checkpoint Path: Zhyever/patchfusion_zoedepth. Loading from the huggingface repo
+midas core worked with custom midas !!
+midas core worked with custom midas !!
+[                                                  ] 0/2, elapsed: 0s, ETA:REACHED PATCHFUSION FORWARD

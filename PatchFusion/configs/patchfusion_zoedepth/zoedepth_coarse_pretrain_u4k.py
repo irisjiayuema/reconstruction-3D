@@ -96,10 +96,16 @@ param_scheduler=dict(
     pct_start=0.5,
     three_phase=False,)
 
-env_cfg=dict(
-    cudnn_benchmark=True,
-    mp_cfg=dict(mp_start_method='forkserver'),
-    dist_cfg=dict(backend='nccl'))
+# env_cfg=dict(
+#     cudnn_benchmark=True,
+#     mp_cfg=dict(mp_start_method='forkserver'),
+#     dist_cfg=dict(backend='nccl'))
+
+env_cfg = {
+    'cudnn_benchmark': True,
+    # 'mp_cfg' and 'dist_cfg' are not needed for single GPU training
+}
+
 
 convert_syncbn=True
 find_unused_parameters=True
