@@ -399,16 +399,6 @@ def create_papr(args, config, scene_render_params):
     """Instantiate PAPR's model based on the provided arguments."""
     ### DELETE ###
     #print('3 - Create PAPR')
-    # # Embedding functions for positional encoding of inputs and view directions
-    # embed_fn, input_ch = get_papr_embedder(args.multires, args.i_embed)
-
-    # input_ch_views = 0
-    # embeddirs_fn = None
-    # if args.use_viewdirs:
-    #     embeddirs_fn, input_ch_views = get_papr_embedder(args.multires_views, args.i_embed)
-    
-    # # Specify output channels; adjust based on PAPR's requirements
-    # output_ch = 5  # This may need to be adjusted for PAPR
 
     # Initialize the PAPR model with specified architecture parameters
     model = get_model(config, device)
@@ -701,23 +691,11 @@ def train_papr(images, depths, valid_depths, poses, intrinsics, i_split, args, c
             tb.add_scalar('lpips', mean_metrics_val.get("lpips"), i)
             if mean_metrics_val.has("depth_rmse"):
                 tb.add_scalar('depth_rmse', mean_metrics_val.get("depth_rmse"), i)
-            if 'rgbs0' in images_val:
-                tb.add_scalars('mse0', {'val': mean_metrics_val.get("img_loss0")}, i)
-                tb.add_scalars('psnr0', {'val': mean_metrics_val.get("psnr0")}, i)
-            if 'rgbs0' in images_val:
-                tb.add_image('val_image',  torch.cat((
-                    torchvision.utils.make_grid(images_val["rgbs"], nrow=1), \
-                    torchvision.utils.make_grid(images_val["rgbs0"], nrow=1), \
-                    torchvision.utils.make_grid(images_val["target_rgbs"], nrow=1), \
-                    torchvision.utils.make_grid(images_val["depths"], nrow=1), \
-                    torchvision.utils.make_grid(images_val["depths0"], nrow=1), \
-                    torchvision.utils.make_grid(images_val["target_depths"], nrow=1)), 2), i)
-            else:
-                tb.add_image('val_image',  torch.cat((
-                    torchvision.utils.make_grid(images_val["rgbs"], nrow=1), \
-                    torchvision.utils.make_grid(images_val["target_rgbs"], nrow=1), \
-                    torchvision.utils.make_grid(images_val["depths"], nrow=1), \
-                    torchvision.utils.make_grid(images_val["target_depths"], nrow=1)), 2), i)
+            tb.add_image('val_image',  torch.cat((
+                torchvision.utils.make_grid(images_val["rgbs"], nrow=1), \
+                torchvision.utils.make_grid(images_val["target_rgbs"], nrow=1), \
+                torchvision.utils.make_grid(images_val["depths"], nrow=1), \
+                torchvision.utils.make_grid(images_val["target_depths"], nrow=1)), 2), i)
 
         # test at the last iteration
         if (i + 1) == N_iters:

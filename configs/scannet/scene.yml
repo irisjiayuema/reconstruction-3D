@@ -1,4 +1,4 @@
-index: "chair"
+index: "scene"
 load_path: ""
 save_dir: "./experiments"
 seed: 1
@@ -14,7 +14,7 @@ dataset:
   coord_scale: 10.0
   type: "synthetic"
   white_bg: true
-  path: "./data/nerf_synthetic/chair/"
+  path: "./data/scannet/scene/"
   factor: 1
   batch_size: 1
   num_workers: 0
@@ -264,7 +264,7 @@ eval:
     extract_patch: false
     type: "synthetic"
     white_bg: true
-    path: "./data/nerf_synthetic/chair/"
+    path: "./data/scannet/scene/"
     factor: 1
     num_workers: 0
     num_slices: -1
@@ -274,7 +274,7 @@ eval:
   max_width: 100
   save_fig: true
 test:
-  load_path: "checkpoints/chair.pth"
+  load_path: "checkpoints/scene.pth"
   #load_path: ""
   save_fig: true
   save_video: false
@@ -286,7 +286,7 @@ test:
       extract_patch: false
       type: "synthetic"
       white_bg: true
-      path: "./data/nerf_synthetic/chair/"
+      path: "./data/scannet/scene/"
       factor: 1
       num_workers: 0
       num_slices: -1

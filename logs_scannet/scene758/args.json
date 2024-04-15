@@ -1,5 +1,5 @@
 {
-    "opt": "configs/nerfsyn/chair.yml",
+    "opt": "configs/scannet/scene.yml",
     "resume": 250000,
     "task": "train",
     "expname": "scene758",
@@ -8,7 +8,7 @@
     "netdepth_fine": 8,
     "netwidth_fine": 256,
     "N_rand": 1024,
-    "num_iterations": 500000,
+    "num_iterations": 10000,
     "lrate": 0.0005,
     "decay_step": 400000,
     "decay_rate": 0.1,
