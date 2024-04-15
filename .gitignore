@@ -5,6 +5,7 @@ data/
 experiments/
 checkpoints/
 datasets/
+run/
 *.zip
 *.pth
 *.pt
