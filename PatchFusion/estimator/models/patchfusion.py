@@ -383,10 +383,11 @@ class PatchFusion(BaselinePretrain, PyTorchModelHubMixin):
             bboxs_feat = torch.cat((inds, bboxs_feat), dim=-1)
             #z_coarse = torch.randn((image_lr.shape[0], 512), device='cuda:0')
             #z_fine = torch.randn((image_lr.shape[0], 512), device='cuda:0')
+            print("Before coarse, fine in patchfusion")
             coarse_prediction, coarse_features = self.coarse_forward(image_lr, z=z_coarse)
             fine_prediction, fine_features = self.fine_forward(crops_image_hr, z=z_fine)
             coarse_prediction_roi, coarse_features_patch_area = self.coarse_postprocess_train(coarse_prediction, coarse_features, bboxs, bboxs_feat)
-
+            print("after coarse, fine in patchfusion")
             depth_prediction, consistency_target = self.fusion_forward(
                 fine_prediction, 
                 crops_image_hr, 

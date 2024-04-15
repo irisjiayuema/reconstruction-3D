@@ -224,17 +224,36 @@ class Trainer:
         
         pbar = tqdm(enumerate(self.train_dataloader), desc=f"Epoch: {epoch_idx + 1}/{self.config.train_cfg.max_epochs}. Loop: Train",
                     total=self.iters_per_train_epoch) if self.runner_info.rank == 0 else enumerate(self.train_dataloader)
+        
         for idx, batch_data in pbar:
             self.train_step += 1
 
             batch_data_collect = self.collect_input(batch_data)
-            loss_dict, log_dict = self.model(mode='train', **batch_data_collect)
+            B = batch_data_collect['image_lr'].shape[0]
+            best_z_coarse = torch.zeros((B, 512), device='cuda:0')
+            z_fine = torch.randn((B, 512), device='cuda:0')
+            # Iterate over each image in the batch
+            for b in range(B):
+                best_loss = float('inf')
+
+                # Evaluate 5 different z_coarse samples for each image separately
+                for _ in range(5):
+                    z_coarse = torch.randn((1, 512), device='cuda:0')
+                    single_image_data = {k: v[b:b+1] for k, v in batch_data_collect.items()}  # Select data for one image
+                    with torch.no_grad():  # Avoid computing gradients during the selection phase
+                        loss_dict, _ = self.model(mode='train', z_coarse=z_coarse, z_fine = z_fine, **single_image_data)
+                        current_loss = loss_dict['total_loss']
+
+                    if current_loss < best_loss:
+                        best_loss = current_loss
+                        best_z_coarse[b, :] = z_coarse.squeeze(0)
             
+            loss_dict, log_dict = self.model(mode='train', z_coarse=best_z_coarse, z_fine = z_fine, **batch_data_collect)
             total_loss = loss_dict['total_loss']
-            # total_loss = self.grad_scaler.scale(loss_dict['total_loss'])
-            
+            print(total_loss)
             self.optimizer_wrapper.update_params(total_loss)
             self.scheduler.step()
+
             
             # log something here
             if self.runner_info.rank == 0:
@@ -291,11 +310,18 @@ class Trainer:
         log_info = 'save checkpoint_{:02d}.pth at {}'.format(epoch_idx + 1, self.runner_info.work_dir)
         print_log(log_info, logger='current')
     
-    def run(self):
+    def freeze_parameters(self):
         for name, param in self.model.named_parameters():
-            if param.requires_grad:
-                print_log('training param: {}'.format(name), logger='current')
-        
+            # Freeze all parameters that do not belong to 'ada' components
+            if "adain" not in name:
+                param.requires_grad = False
+            else:
+                print_log(f"Training param: {name}", logger='current')  # Log ada-related parameters that will still be trained.
+
+    def run(self):
+        # Call the function to freeze parameters before training
+        self.freeze_parameters()
+            
         # self.val_epoch() # do you want to debug val step?
         for epoch_idx in range(self.config.train_cfg.max_epochs):
             if self.runner_info.distributed:
