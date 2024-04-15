@@ -341,6 +341,7 @@ class BaselinePretrain(nn.Module):
     
     def forward(
         self,
+        z_coarse,
         z_fine,
         mode,
         image_lr,
@@ -356,8 +357,10 @@ class BaselinePretrain(nn.Module):
         
         if mode == 'train':
             loss_dict = {}
+
             if self.target == 'coarse':
-                model_output_dict = self.coarse_branch(image_lr)    
+                print("coarse")
+                model_output_dict = self.coarse_branch(image_lr, z_coarse)    
                 depth_prediction = model_output_dict['metric_depth']
                 loss_dict['coarse_loss'] = self.sigloss(depth_prediction, depth_gt, self.min_depth, self.max_depth)
                 loss_dict['total_loss'] = loss_dict['coarse_loss']
