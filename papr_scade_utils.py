@@ -36,7 +36,7 @@ def config_parser():
 
     ### Learning rate updates
     parser.add_argument('--num_iterations', type=int, default=10000, help='Number of epochs')
-    parser.add_argument("--lrate", type=float, default=5e-4, 
+    parser.add_argument("--lrate", type=float, default=5e-8, 
                         help='learning rate')
     parser.add_argument('--decay_step', type=int, default=400000, help='Decay step for lr decay [default: 200000]')
     parser.add_argument('--decay_rate', type=float, default=0.1, help='Decay rate for lr decay [default: 0.7]')
