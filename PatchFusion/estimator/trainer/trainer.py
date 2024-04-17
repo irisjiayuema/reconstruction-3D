@@ -151,8 +151,11 @@ class Trainer:
             self.val_step += 1
 
             batch_data_collect = self.collect_input(batch_data)
+            B = batch_data_collect['image_lr'].shape[0]
+            z_fine = torch.randn((B, 512), device='cuda:0') * 4.0
+            z_coarse = torch.randn((B, 512), device='cuda:0') * 4.0
             # result, log_dict = self.model(mode='infer',  **batch_data_collect)
-            result, log_dict = self.model(mode='infer', cai_mode='m1', process_num=4, **batch_data_collect) # might use test/val to split cases
+            result, log_dict = self.model(mode='infer', cai_mode='m1', process_num=4, z_coarse=z_coarse, z_fine=z_fine, **batch_data_collect) # might use test/val to split cases
 
             if isinstance(result, list):
                 # in case you have multiple results
@@ -230,15 +233,15 @@ class Trainer:
 
             batch_data_collect = self.collect_input(batch_data)
             B = batch_data_collect['image_lr'].shape[0]
-            best_z_coarse = torch.zeros((B, 512), device='cuda:0')
-            z_fine = torch.randn((B, 512), device='cuda:0')
+            best_z_coarse = torch.zeros((B, 512), device='cuda:0') * 4.0
+            z_fine = torch.randn((B, 512), device='cuda:0') * 4.0
             # Iterate over each image in the batch
             for b in range(B):
                 best_loss = float('inf')
 
                 # Evaluate 5 different z_coarse samples for each image separately
-                for _ in range(5):
-                    z_coarse = torch.randn((1, 512), device='cuda:0')
+                for _ in range(10):
+                    z_coarse = torch.randn((1, 512), device='cuda:0') * 4.0
                     single_image_data = {k: v[b:b+1] for k, v in batch_data_collect.items()}  # Select data for one image
                     with torch.no_grad():  # Avoid computing gradients during the selection phase
                         loss_dict, _ = self.model(mode='train', z_coarse=z_coarse, z_fine = z_fine, **single_image_data)
@@ -291,13 +294,13 @@ class Trainer:
                     self.val_epoch()
                 
     def save_checkpoint(self, epoch_idx):
-        # As default, the model is wrappered by DDP!!! Hence, even if you're using one gpu, please use dist_train.sh
-        if hasattr(self.model.module, 'get_save_dict'):
-            print_log('Saving ckp, but use the inner get_save_dict fuction to get model_dict', logger='current')
-            # print_log('For saving space. Would you like to save base model several times? :>', logger='current')
-            model_dict = self.model.module.get_save_dict()
-        else:
-            model_dict = self.model.module.state_dict() 
+        # # As default, the model is wrappered by DDP!!! Hence, even if you're using one gpu, please use dist_train.sh
+        # if hasattr(self.model.module, 'get_save_dict'):
+        #     print_log('Saving ckp, but use the inner get_save_dict fuction to get model_dict', logger='current')
+        #     # print_log('For saving space. Would you like to save base model several times? :>', logger='current')
+        #     model_dict = self.model.module.get_save_dict()
+        # else:
+        model_dict = self.model.state_dict() 
             
         checkpoint_dict = {
             'epoch': epoch_idx, 

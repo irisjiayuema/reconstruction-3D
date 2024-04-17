@@ -359,14 +359,13 @@ class BaselinePretrain(nn.Module):
             loss_dict = {}
 
             if self.target == 'coarse':
-                print("coarse")
                 model_output_dict = self.coarse_branch(image_lr, z_coarse)    
                 depth_prediction = model_output_dict['metric_depth']
                 loss_dict['coarse_loss'] = self.sigloss(depth_prediction, depth_gt, self.min_depth, self.max_depth)
                 loss_dict['total_loss'] = loss_dict['coarse_loss']
                 return loss_dict, {'rgb': image_lr, 'depth_pred': depth_prediction, 'depth_gt': depth_gt}
             elif self.target == 'fine':
-                model_output_dict = self.fine_branch(crops_image_hr) # 1/2 res, 1/4 res, 1/8 res, 1/16 res
+                model_output_dict = self.fine_branch(crops_image_hr, z_fine) # 1/2 res, 1/4 res, 1/8 res, 1/16 res
                 depth_prediction = model_output_dict['metric_depth']
                 loss_dict['fine_loss'] = self.sigloss(depth_prediction, crop_depths, self.min_depth, self.max_depth)
                 loss_dict['total_loss'] = loss_dict['fine_loss']
@@ -376,7 +375,7 @@ class BaselinePretrain(nn.Module):
 
         else:
             if self.target == 'coarse':
-                model_output_dict = self.coarse_branch(image_lr)    
+                model_output_dict = self.coarse_branch(image_lr, z_coarse)    
                 depth_prediction = model_output_dict['metric_depth']
                 
             elif self.target == 'fine':

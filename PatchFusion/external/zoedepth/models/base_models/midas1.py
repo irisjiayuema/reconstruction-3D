@@ -352,8 +352,8 @@ class MidasCore(nn.Module):
         # print("img_size", img_size)
         # midas = torch.hub.load("intel-isl/MiDaS", midas_model_type,
         #                        pretrained=use_pretrained_midas, force_reload=force_reload)
-        midas = torch.hub.load("AyaanShah2204/MiDaS", midas_model_type,
-                                pretrained=use_pretrained_midas, force_reload=force_reload) # switcher to a better version?
+        # midas = torch.hub.load("AyaanShah2204/MiDaS", midas_model_type,
+        #                         pretrained=use_pretrained_midas, force_reload=force_reload) # switcher to a better version?
         midas = DPTDepthModel(backbone = "beitl16_384")
         #torch.save(midas.state_dict(), 'midas_model_state_dict.pt')
         midas.load_state_dict(torch.load('midas_model_state_dict.pt'), strict=False)

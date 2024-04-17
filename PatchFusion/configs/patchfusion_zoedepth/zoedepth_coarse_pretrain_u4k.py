@@ -11,7 +11,7 @@ zoe_depth_config=dict(
         
     # some important params
     midas_model_type='DPT_BEiT_L_384',
-    pretrained_resource='local::./work_dir/ZoeDepthv1.pt', # use torch2 version
+    pretrained_resource='local::/home/rsp8/scratch/work_dir/ZoeDepthv1.pt', # use torch2 version
     use_pretrained_midas=True,
     train_midas=True,
     freeze_midas_bn=True,
@@ -76,7 +76,7 @@ collect_input_args=['image_lr', 'crops_image_hr', 'depth_gt', 'crop_depths', 'bb
 
 project='patchfusion'
 
-train_cfg=dict(max_epochs=24, val_interval=2, save_checkpoint_interval=24, log_interval=100, train_log_img_interval=500, val_log_img_interval=50, val_type='epoch_base', eval_start=0)
+train_cfg=dict(max_epochs=30, val_interval=2, save_checkpoint_interval=1, log_interval=100, train_log_img_interval=500, val_log_img_interval=50, val_type='epoch_base', eval_start=0)
 
 optim_wrapper=dict(
     optimizer=dict(type='AdamW', lr=0.0002, weight_decay=0.01),
